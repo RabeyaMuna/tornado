@@ -61,7 +61,6 @@ def all():
 
 
 def test_runner_factory(stderr):
-
     class TornadoTextTestResult(unittest.TextTestResult):
         def addSkip(self, test, reason):
             if reason == ABT_SKIP_MESSAGE:

@@ -382,7 +382,7 @@ class Template:
             if isinstance(chunk, _ExtendsBlock):
                 if not loader:
                     raise ParseError(
-                        "{% extends %} block found, but no " "template loader"
+                        "{% extends %} block found, but no template loader"
                     )
                 template = loader.load(chunk.name, self.name)
                 ancestors.extend(template._get_ancestors(loader))
@@ -660,7 +660,7 @@ class _Expression(_Node):
     def generate(self, writer: "_CodeWriter") -> None:
         writer.write_line("_tt_tmp = %s" % self.expression, self.line)
         writer.write_line(
-            "if isinstance(_tt_tmp, _tt_string_types):" " _tt_tmp = _tt_utf8(_tt_tmp)",
+            "if isinstance(_tt_tmp, _tt_string_types): _tt_tmp = _tt_utf8(_tt_tmp)",
             self.line,
         )
         writer.write_line("else: _tt_tmp = _tt_utf8(str(_tt_tmp))", self.line)
