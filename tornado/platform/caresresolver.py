@@ -66,11 +66,20 @@ class CaresResolver(Resolver):
         if is_valid_ip(host):
             addresses = [host]
         else:
-            # gethostbyname doesn't take callback as a kwarg
+            # pycares APIs vary across versions; prefer gethostbyname when
+            # available, otherwise fall back to the newer getaddrinfo API.
             fut = Future()  # type: Future[Tuple[Any, Any]]
-            self.channel.gethostbyname(
-                host, family, lambda result, error: fut.set_result((result, error))
-            )
+            if hasattr(self.channel, "gethostbyname"):
+                self.channel.gethostbyname(
+                    host, family, lambda result, error: fut.set_result((result, error))
+                )
+            else:
+                self.channel.getaddrinfo(
+                    host,
+                    None,
+                    family=family,
+                    callback=lambda result, error: fut.set_result((result, error)),
+                )
             result, error = yield fut
             if error:
                 raise OSError(

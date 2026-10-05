@@ -22,8 +22,12 @@ try:
     import pycares  # type: ignore
 except ImportError:
     pycares = None
+    CaresResolver = None
 else:
-    from tornado.platform.caresresolver import CaresResolver
+    try:
+        from tornado.platform.caresresolver import CaresResolver
+    except AttributeError:
+        CaresResolver = None
 
 
 @abstract_base_test
@@ -160,6 +164,7 @@ class ThreadedResolverImportTest(unittest.TestCase):
 # name with spaces used in this test.
 @skipIfNoNetwork
 @unittest.skipIf(pycares is None, "pycares module not present")
+@unittest.skipIf(CaresResolver is None, "pycares Channel API incompatible")
 @unittest.skipIf(sys.platform == "win32", "pycares doesn't return loopback on windows")
 @unittest.skipIf(sys.platform == "darwin", "pycares doesn't return 127.0.0.1 on darwin")
 class CaresResolverTest(_ResolverTestMixin):
