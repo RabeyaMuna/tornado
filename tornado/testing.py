@@ -759,6 +759,7 @@ class ExpectLog(logging.Filter):
         if (
             not typ
             and self.required
+            and self.matched > 0
             and (self.deprecated_level_matched >= self.matched)
         ):
             warnings.warn(
