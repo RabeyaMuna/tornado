@@ -285,7 +285,10 @@ class AsyncIOMainLoop(BaseAsyncIOLoop):
     """
 
     def initialize(self, **kwargs: Any) -> None:  # type: ignore
-        super().initialize(asyncio.get_event_loop(), **kwargs)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=DeprecationWarning)
+            loop = asyncio.get_event_loop()
+        super().initialize(loop, **kwargs)
 
     def _make_current(self) -> None:
         # AsyncIOMainLoop already refers to the current asyncio loop so
@@ -381,10 +384,15 @@ def to_asyncio_future(tornado_future: asyncio.Future) -> asyncio.Future:
     return convert_yielded(tornado_future)
 
 
-if sys.platform == "win32" and hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
-    # "Any thread" and "selector" should be orthogonal, but there's not a clean
-    # interface for composing policies so pick the right base.
-    _BasePolicy = asyncio.WindowsSelectorEventLoopPolicy  # type: ignore
+if sys.platform == "win32":
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=DeprecationWarning)
+        if hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
+            # "Any thread" and "selector" should be orthogonal, but there's not a clean
+            # interface for composing policies so pick the right base.
+            _BasePolicy = asyncio.WindowsSelectorEventLoopPolicy  # type: ignore
+        else:
+            _BasePolicy = asyncio.DefaultEventLoopPolicy
 else:
     _BasePolicy = asyncio.DefaultEventLoopPolicy
 

@@ -25,6 +25,7 @@ from io import BytesIO
 
 from tornado import httputil
 from tornado import ioloop
+from tornado.netutil import is_valid_ip
 
 from tornado.escape import utf8, native_str
 from tornado.httpclient import (
@@ -383,6 +384,11 @@ class CurlAsyncHTTPClient(AsyncHTTPClient):
         else:
             curl.setopt(pycurl.USERAGENT, "Mozilla/5.0 (compatible; pycurl)")
         if request.network_interface:
+            if not is_valid_ip(request.network_interface):
+                raise ValueError(
+                    "Unrecognized IPv4 or IPv6 address for network_interface, got %r"
+                    % (request.network_interface,)
+                )
             curl.setopt(pycurl.INTERFACE, request.network_interface)
         if request.decompress_response:
             curl.setopt(pycurl.ENCODING, "gzip,deflate")
@@ -480,12 +486,15 @@ class CurlAsyncHTTPClient(AsyncHTTPClient):
                 raise ValueError("Body must be None for GET request")
             request_buffer = BytesIO(utf8(request.body or ""))
 
-            def ioctl(cmd: int) -> None:
-                if cmd == curl.IOCMD_RESTARTREAD:  # type: ignore
-                    request_buffer.seek(0)
+            def seek(offset: int, whence: int) -> int:
+                try:
+                    request_buffer.seek(offset, whence)
+                    return 0  # CURL_SEEKFUNC_OK
+                except Exception:
+                    return 1  # CURL_SEEKFUNC_FAIL
 
             curl.setopt(pycurl.READFUNCTION, request_buffer.read)
-            curl.setopt(pycurl.IOCTLFUNCTION, ioctl)
+            curl.setopt(pycurl.SEEKFUNCTION, seek)
             if request.method == "POST":
                 curl.setopt(pycurl.POSTFIELDSIZE, len(request.body or ""))
             else:
