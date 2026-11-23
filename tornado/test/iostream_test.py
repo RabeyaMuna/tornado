@@ -1,35 +1,3 @@
-from tornado.concurrent import Future
-from tornado import gen
-from tornado import netutil
-from tornado.ioloop import IOLoop
-from tornado.iostream import (
-    IOStream,
-    SSLIOStream,
-    PipeIOStream,
-    StreamClosedError,
-    _StreamBuffer,
-)
-from tornado.httputil import HTTPHeaders
-from tornado.locks import Condition, Event
-from tornado.log import gen_log
-from tornado.netutil import ssl_options_to_context, ssl_wrap_socket
-from tornado.platform.asyncio import AddThreadSelectorEventLoop
-from tornado.tcpserver import TCPServer
-from tornado.testing import (
-    AsyncHTTPTestCase,
-    AsyncHTTPSTestCase,
-    AsyncTestCase,
-    bind_unused_port,
-    ExpectLog,
-    gen_test,
-)
-from tornado.test.util import (
-    skipIfNonUnix,
-    refusing_port,
-    skipPypy3V58,
-    ignore_deprecation,
-)
-from tornado.web import RequestHandler, Application
 import asyncio
 import errno
 import hashlib
@@ -40,8 +8,40 @@ import random
 import socket
 import ssl
 import typing
-from unittest import mock
 import unittest
+from unittest import mock
+
+from tornado import gen, netutil
+from tornado.concurrent import Future
+from tornado.httputil import HTTPHeaders
+from tornado.ioloop import IOLoop
+from tornado.iostream import (
+    IOStream,
+    PipeIOStream,
+    SSLIOStream,
+    StreamClosedError,
+    _StreamBuffer,
+)
+from tornado.locks import Condition, Event
+from tornado.log import gen_log
+from tornado.netutil import ssl_options_to_context, ssl_wrap_socket
+from tornado.platform.asyncio import AddThreadSelectorEventLoop
+from tornado.tcpserver import TCPServer
+from tornado.test.util import (
+    ignore_deprecation,
+    refusing_port,
+    skipIfNonUnix,
+    skipPypy3V58,
+)
+from tornado.testing import (
+    AsyncHTTPSTestCase,
+    AsyncHTTPTestCase,
+    AsyncTestCase,
+    ExpectLog,
+    bind_unused_port,
+    gen_test,
+)
+from tornado.web import Application, RequestHandler
 
 
 def _server_ssl_options():
@@ -56,7 +56,7 @@ class HelloHandler(RequestHandler):
         self.write("Hello")
 
 
-class TestIOStreamWebMixin(object):
+class TestIOStreamWebMixin:
     def _make_client_iostream(self):
         raise NotImplementedError()
 
@@ -167,7 +167,7 @@ class TestIOStreamWebMixin(object):
             stream.read_bytes(1)
 
 
-class TestReadWriteMixin(object):
+class TestReadWriteMixin:
     # Tests where one stream reads and the other writes.
     # These should work for BaseIOStream implementations.
 
@@ -718,8 +718,10 @@ class TestReadWriteMixin(object):
             yield [produce(), consume()]
             assert produce_hash.hexdigest() == consume_hash.hexdigest()
         finally:
-            ws.close()
-            rs.close()
+            try:
+                ws.close()
+            finally:
+                rs.close()
 
 
 class TestIOStreamMixin(TestReadWriteMixin):
@@ -785,12 +787,14 @@ class TestIOStreamMixin(TestReadWriteMixin):
     def test_read_until_close_with_error(self: typing.Any):
         server, client = yield self.make_iostream_pair()
         try:
-            with mock.patch(
-                "tornado.iostream.BaseIOStream._try_inline_read",
-                side_effect=IOError("boom"),
+            with (
+                mock.patch(
+                    "tornado.iostream.BaseIOStream._try_inline_read",
+                    side_effect=OSError("boom"),
+                ),
+                self.assertRaisesRegex(IOError, "boom"),
             ):
-                with self.assertRaisesRegex(IOError, "boom"):
-                    client.read_until_close()
+                client.read_until_close()
         finally:
             server.close()
             client.close()
@@ -952,9 +956,7 @@ class TestIOStreamStartTLS(AsyncTestCase):
             self.server_stream = None
             self.server_accepted = Future()  # type: Future[None]
             netutil.add_accept_handler(self.listener, self.accept)
-            self.client_stream = IOStream(
-                socket.socket()
-            )  # type: typing.Optional[IOStream]
+            self.client_stream = IOStream(socket.socket())  # type: typing.Optional[IOStream]
             self.io_loop.add_future(
                 self.client_stream.connect(("127.0.0.1", self.port)), self.stop
             )
@@ -1198,16 +1200,18 @@ class TestIOStreamCheckHostname(AsyncTestCase):
     async def test_no_match(self):
         stream = SSLIOStream(socket.socket(), ssl_options=self.client_ssl_ctx)
         with ExpectLog(gen_log, ".*alert bad certificate", level=logging.WARNING):
-            with self.assertRaises(ssl.SSLCertVerificationError):
-                with ExpectLog(
+            with (
+                self.assertRaises(ssl.SSLCertVerificationError),
+                ExpectLog(
                     gen_log,
                     ".*(certificate verify failed: Hostname mismatch)",
                     level=logging.WARNING,
-                ):
-                    await stream.connect(
-                        ("127.0.0.1", self.port),
-                        server_hostname="bar.example.com",
-                    )
+                ),
+            ):
+                await stream.connect(
+                    ("127.0.0.1", self.port),
+                    server_hostname="bar.example.com",
+                )
             # The server logs a warning while cleaning up the failed connection.
             # Unfortunately there's no good hook to wait for this logging.
             await asyncio.sleep(1 if platform.system() == "Windows" else 0.1)
